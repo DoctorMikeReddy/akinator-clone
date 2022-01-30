@@ -1,0 +1,106 @@
+<?php
+include 'skin.inc.php'; 
+
+if(isset($_GET['rep']) && isset($_SESSION['yes']) && $_GET['rep']==md5($_SESSION['yes'])){
+$reponses=unserialize(base64_decode($_SESSION['yes']));
+}
+if(isset($_GET['rep']) && isset($_SESSION['no']) && $_GET['rep']==md5($_SESSION['no'])){
+$reponses=unserialize(base64_decode($_SESSION['no']));
+}
+//if(isset($_GET['rep']) && isset($_SESSION['depends']) && $_GET['rep']==md5($_SESSION['depends'])){
+//$reponses=unserialize(base64_decode($_SESSION['depends']));
+//}
+if(!isset($reponses)){
+$reponses=array();
+$query="1";$query2="1";
+}
+
+if(!isset($query)){
+	$req = mysql_query("SELECT id FROM `q` ORDER BY `id` DESC LIMIT 0 , 1");
+	$MAX = mysql_fetch_array($req);
+	$MAX = $MAX['id'];
+	$query = '';$query2='';
+	foreach($reponses AS $Q =>$R){
+		if(empty($query)){
+			$query = "id IN ( SELECT id FROM `R` WHERE Q={$Q} AND ( R={$R} OR R=2) ) ";
+			$query2= " Q!={$Q} ";
+		}else{
+			$query.= "AND id IN ( SELECT id FROM `R` WHERE Q={$Q} AND (R={$R} OR R=2) ) ";
+			$query2.=" AND Q!={$Q}";
+		}
+		}
+		}
+
+
+$query_a="SELECT * FROM `item` WHERE {$query}";
+//echo $query_a;
+$req = mysql_query($query_a);
+$count = mysql_num_rows($req);
+if($count==0){
+echo '<strong>I have no idea what you are thinking of :\'(</strong>';
+vide_sess();
+}elseif($count==1){
+echo '<br>It\'s "<strong>'; 
+$_ITEM = mysql_fetch_array($req);
+$_SESSION['find']=$_ITEM['name'];
+$_SESSION['old_rep']=$reponses;
+echo $_ITEM['name'].'</strong>". <a href="find.php?r=Y">Yes</a> - <a href="find.php?r=N">No</a> ?'; //<a href="find.php?r=D">It depends</a>?';
+vide_sess();
+}else{
+$query_b="
+SELECT 
+Q
+FROM `R` 
+WHERE 
+({$query2}) AND 
+id IN ( SELECT id FROM `item` WHERE {$query} )
+GROUP BY Q 
+HAVING(
+SUM(CASE WHEN R=1 THEN 1 ELSE 0 END) != SUM(CASE WHEN R=0 THEN 1 ELSE 0 END) AND
+SUM(CASE WHEN R=1 THEN 1 ELSE 0 END) != 0 AND
+SUM(CASE WHEN R=0 THEN 1 ELSE 0 END) != 0
+)
+ORDER BY 
+SUM(CASE WHEN R=1 THEN 1 ELSE 0 END)*SUM(CASE WHEN R=0 THEN 1 ELSE 0 END)
+DESC
+";
+ 
+//echo $query_b;
+$req = mysql_query($query_b) or die(mysql_error());
+
+if(mysql_num_rows($req)>0){
+$id_question = mysql_fetch_array($req) or die(mysql_error());
+$id_question =$id_question ['Q'];
+
+$req=mysql_query("SELECT * FROM `Q` WHERE id={$id_question}");
+$_ITEM=mysql_fetch_array($req) or die(mysql_error());
+$yes=$reponses;
+$no=$reponses;
+$yes[$id_question]=1;
+$yes=base64_encode(serialize($yes));
+$_SESSION['yes']=$yes;
+$no[$id_question]=0;
+$no=base64_encode(serialize($no)); 
+$_SESSION['no']=$no;
+echo '<h1> - QUESTION N°'.(count($reponses)+1).' - </h1>'; 
+echo $_ITEM['Q'];
+echo ' <a href="'.$url_base.'/index.php?rep='.md5($_SESSION['yes']).'">YES</a> - <a href="'.$url_base.'/index.php?rep='.md5($_SESSION['no']).'">NO</a>';
+
+}else{
+
+echo '<br>My database isn\'t accurate enough for this ...
+<br>You thought of something listed below I hope ^^<br>
+<ul>';
+
+$req = mysql_query($query_a);
+while($_ITEM = mysql_fetch_array($req)){
+echo '<li><strong>'.$_ITEM['name'].'</strong> | <a href="find.php?rep='.$_ITEM['name'].'&r=Y">I\'ve thought of it.</a></li>';
+}
+echo '</ul>';
+echo "Eh!? <br> You didn't think of one of these words? What did you think of then?: <form><input type='text' name='old_rep' value='Object you were thinking of'><input type='submit'></form>";
+}
+}
+
+echo '<br><br><a href="index.php">Home</a>';
+include 'bas.inc.php';
+?>
